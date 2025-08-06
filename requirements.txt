@@ -10,3 +10,4 @@ ftfy
 regex
 matplotlib
 einops
+natten

@@ -1,0 +1,88 @@
+[[34m2025-08-06 22:35:44[0m] Experiment directory created at exps/test
+[[34m2025-08-06 22:36:19[0m] Experiment directory created at exps/test
+[[34m2025-08-06 22:36:38[0m] Experiment directory created at exps/test
+[[34m2025-08-06 22:36:39[0m] HDiT Parameters: 34,045,837
+[[34m2025-08-06 22:36:39[0m] Dataset contains 1,000 images (../data/imagenet256)
+[[34m2025-08-06 22:36:39[0m] Total batch size: 256
+[[34m2025-08-06 22:36:39[0m] Starting training experiment: test
+[[34m2025-08-06 22:37:06[0m] Experiment directory created at exps/test
+[[34m2025-08-06 22:37:06[0m] HDiT Parameters: 34,045,837
+[[34m2025-08-06 22:37:06[0m] Dataset contains 1,000 images (../data/imagenet256)
+[[34m2025-08-06 22:37:06[0m] Total batch size: 256
+[[34m2025-08-06 22:37:06[0m] Starting training experiment: test
+[[34m2025-08-06 22:37:54[0m] Experiment directory created at exps/test
+[[34m2025-08-06 22:37:55[0m] HDiT Parameters: 34,045,837
+[[34m2025-08-06 22:37:55[0m] Dataset contains 1,000 images (../data/imagenet256)
+[[34m2025-08-06 22:37:55[0m] Total batch size: 256
+[[34m2025-08-06 22:37:55[0m] Starting training experiment: test
+[[34m2025-08-06 22:38:03[0m] Experiment directory created at exps/test
+[[34m2025-08-06 22:38:03[0m] HDiT Parameters: 34,045,837
+[[34m2025-08-06 22:38:03[0m] Dataset contains 1,000 images (../data/imagenet256)
+[[34m2025-08-06 22:38:03[0m] Total batch size: 256
+[[34m2025-08-06 22:38:03[0m] Starting training experiment: test
+[[34m2025-08-06 22:38:56[0m] Experiment directory created at exps/test
+[[34m2025-08-06 22:38:56[0m] HDiT Parameters: 34,045,837
+[[34m2025-08-06 22:38:56[0m] Dataset contains 1,000 images (../data/imagenet256)
+[[34m2025-08-06 22:38:56[0m] Total batch size: 256
+[[34m2025-08-06 22:38:56[0m] Starting training experiment: test
+[[34m2025-08-06 22:39:26[0m] Experiment directory created at exps/test
+[[34m2025-08-06 22:39:26[0m] HDiT Parameters: 34,045,837
+[[34m2025-08-06 22:39:26[0m] Dataset contains 1,000 images (../data/imagenet256)
+[[34m2025-08-06 22:39:26[0m] Total batch size: 256
+[[34m2025-08-06 22:39:26[0m] Starting training experiment: test
+[[34m2025-08-06 22:40:13[0m] Experiment directory created at exps/test
+[[34m2025-08-06 22:40:13[0m] HDiT Parameters: 34,045,837
+[[34m2025-08-06 22:40:13[0m] Dataset contains 1,000 images (../data/imagenet256)
+[[34m2025-08-06 22:40:13[0m] Total batch size: 256
+[[34m2025-08-06 22:40:13[0m] Starting training experiment: test
+[[34m2025-08-06 22:41:53[0m] Experiment directory created at exps/test
+[[34m2025-08-06 22:41:54[0m] HDiT Parameters: 34,045,837
+[[34m2025-08-06 22:41:54[0m] Dataset contains 1,000 images (../data/imagenet256)
+[[34m2025-08-06 22:41:54[0m] Total batch size: 256
+[[34m2025-08-06 22:41:54[0m] Starting training experiment: test
+[[34m2025-08-06 22:42:23[0m] Experiment directory created at exps/test
+[[34m2025-08-06 22:42:23[0m] HDiT Parameters: 34,045,837
+[[34m2025-08-06 22:42:23[0m] Dataset contains 1,000 images (../data/imagenet256)
+[[34m2025-08-06 22:42:23[0m] Total batch size: 1
+[[34m2025-08-06 22:42:23[0m] Starting training experiment: test
+[[34m2025-08-06 22:43:21[0m] Experiment directory created at exps/test
+[[34m2025-08-06 22:43:22[0m] HDiT Parameters: 34,045,837
+[[34m2025-08-06 22:43:22[0m] Dataset contains 1,000 images (../data/imagenet256)
+[[34m2025-08-06 22:43:22[0m] Total batch size: 1
+[[34m2025-08-06 22:43:22[0m] Starting training experiment: test
+[[34m2025-08-06 22:45:51[0m] Experiment directory created at exps/test
+[[34m2025-08-06 22:45:52[0m] HDiT Parameters: 34,045,837
+[[34m2025-08-06 22:45:52[0m] Dataset contains 1,000 images (../data/imagenet256)
+[[34m2025-08-06 22:45:52[0m] Total batch size: 1
+[[34m2025-08-06 22:45:52[0m] Starting training experiment: test
+[[34m2025-08-06 22:48:07[0m] Experiment directory created at exps/test
+[[34m2025-08-06 22:48:07[0m] HDiT Parameters: 34,045,837
+[[34m2025-08-06 22:48:07[0m] Dataset contains 1,000 images (../data/imagenet256)
+[[34m2025-08-06 22:48:07[0m] Total batch size: 1
+[[34m2025-08-06 22:48:07[0m] Starting training experiment: test
+[[34m2025-08-06 22:48:27[0m] Experiment directory created at exps/test
+[[34m2025-08-06 22:48:27[0m] HDiT Parameters: 34,045,837
+[[34m2025-08-06 22:48:27[0m] Dataset contains 1,000 images (../data/imagenet256)
+[[34m2025-08-06 22:48:27[0m] Total batch size: 1
+[[34m2025-08-06 22:48:27[0m] Starting training experiment: test
+[[34m2025-08-06 22:49:01[0m] Experiment directory created at exps/test
+[[34m2025-08-06 22:49:02[0m] HDiT Parameters: 34,045,837
+[[34m2025-08-06 22:49:02[0m] Dataset contains 1,000 images (../data/imagenet256)
+[[34m2025-08-06 22:49:02[0m] Total batch size: 1
+[[34m2025-08-06 22:49:02[0m] Starting training experiment: test
+[[34m2025-08-06 22:49:15[0m] Experiment directory created at exps/test
+[[34m2025-08-06 22:49:48[0m] Experiment directory created at exps/test
+[[34m2025-08-06 22:49:48[0m] HDiT Parameters: 34,045,837
+[[34m2025-08-06 22:49:48[0m] Dataset contains 1,000 images (../data/imagenet256)
+[[34m2025-08-06 22:49:48[0m] Total batch size: 1
+[[34m2025-08-06 22:49:48[0m] Starting training experiment: test
+[[34m2025-08-06 22:51:23[0m] Experiment directory created at exps/test
+[[34m2025-08-06 22:51:23[0m] HDiT Parameters: 34,045,837
+[[34m2025-08-06 22:51:23[0m] Dataset contains 1,000 images (../data/imagenet256)
+[[34m2025-08-06 22:51:23[0m] Total batch size: 1
+[[34m2025-08-06 22:51:23[0m] Starting training experiment: test
+[[34m2025-08-06 22:52:06[0m] Experiment directory created at exps/test
+[[34m2025-08-06 22:52:07[0m] HDiT Parameters: 34,045,837
+[[34m2025-08-06 22:52:07[0m] Dataset contains 1,000 images (../data/imagenet256)
+[[34m2025-08-06 22:52:07[0m] Total batch size: 1
+[[34m2025-08-06 22:52:07[0m] Starting training experiment: test

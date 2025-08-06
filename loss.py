@@ -22,16 +22,13 @@ class FMLoss:
             weighting="uniform",
             encoders=[], 
             accelerator=None, 
-            latents_scale=None, 
-            latents_bias=None,
             ):
         self.prediction = prediction
         self.weighting = weighting
         self.path_type = path_type
         self.encoders = encoders
         self.accelerator = accelerator
-        self.latents_scale = latents_scale
-        self.latents_bias = latents_bias
+
 
     def interpolant(self, t):
         if self.path_type == "linear":
@@ -49,7 +46,7 @@ class FMLoss:
 
         return alpha_t, sigma_t, d_alpha_t, d_sigma_t
 
-    def __call__(self, model, images, model_kwargs=None, zs=None):
+    def __call__(self, model, images, model_kwargs=None):
         if model_kwargs == None:
             model_kwargs = {}
         # sample timesteps

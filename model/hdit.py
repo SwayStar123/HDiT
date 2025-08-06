@@ -18,12 +18,10 @@ class HDiTBlock(nn.Module):
         self.attn = Attention(hidden_size, num_heads, cond_size, attention_type, kernel_size)
         self.ff = FeedForward(hidden_size, mlp_dim, cond_size)
 
-    def forward(self, x, c, l=None):
-        x, l = self.attn(x, c, l=l)
+    def forward(self, x, c):
+        x = self.attn(x, c)
         x = self.ff(x, c)
-        if l is not None:
-            l = self.ff(l, c)
-        return x, l
+        return x
 
 class HDiT(nn.Module):
     def __init__(
@@ -52,7 +50,7 @@ class HDiT(nn.Module):
 
         map_width = bottleneck_width # Use the widest dimension for mapping network
         self.t_embedder = TimestepEmbedder(map_width)
-        self.y_embedder = LabelEmbedder(num_classes, map_width, 0.05)
+        self.y_embedder = LabelEmbedder(num_classes, map_width)
         self.mapping_network = nn.Sequential(
             RMSNorm(map_width),
             *[nn.Sequential(nn.Linear(map_width, map_width), nn.SiLU()) for _ in range(mapping_network_depth)]

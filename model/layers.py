@@ -104,11 +104,11 @@ class AxialRoPE(nn.Module):
         # Calculate theta for image coordinates
         theta_y = torch.outer(y_pos, self.freqs).reshape(h, 1, -1)
         theta_x = torch.outer(x_pos, self.freqs).reshape(1, w, -1)
-        # Flatten and concatenate
-        return torch.cat([
-            theta_y.reshape(h * w, -1),
-            theta_x.reshape(h * w, -1)
-        ], dim=-1)
+        # Tile and reshape to match the sequence length HW
+        theta_y = theta_y.expand(-1, w, -1).reshape(h * w, -1)
+        theta_x = theta_x.expand(h, -1, -1).reshape(h * w, -1)
+
+        return torch.cat([theta_y, theta_x], dim=-1)
 
 def apply_rotary_pos_emb(q, k, theta):
     """ Apply RoPE"""
@@ -163,6 +163,8 @@ class Attention(nn.Module):
         theta_img = self.pos_emb(H, W, x.device)
         theta = theta_img.unsqueeze(0).unsqueeze(0)
         q, k = apply_rotary_pos_emb(q, k, theta)
+        q = q.to(dtype=x.dtype)
+        k = k.to(dtype=x.dtype)
 
         if self.attention_type == "neighborhood":
             q, k, v = map(lambda t: rearrange(t, 'b heads (h w) d -> b h w heads d', h=H, w=W), (q, k, v))

@@ -62,3 +62,19 @@ class CustomDataset(Dataset):
                 image = image.reshape(*image.shape[:2], -1).transpose(2, 0, 1)
 
         return torch.from_numpy(image), torch.tensor(self.labels[idx])
+
+
+class MockDataset(Dataset):
+    def __init__(self, num_samples=100, image_shape=(3, 256, 256), num_classes=1000):
+        self.num_samples = num_samples
+        self.image_shape = image_shape
+        self.num_classes = num_classes
+        self.labels = np.random.randint(0, num_classes, size=(num_samples,))
+
+    def __len__(self):
+        return self.num_samples
+
+    def __getitem__(self, idx):
+        image = np.random.rand(*self.image_shape).astype(np.float32)
+        label = self.labels[idx]
+        return torch.from_numpy(image), torch.tensor(label)

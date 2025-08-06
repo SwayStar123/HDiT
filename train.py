@@ -19,11 +19,11 @@ from accelerate.logging import get_logger
 from accelerate.utils import ProjectConfiguration, set_seed
 from transformers.optimization import get_scheduler
 
-from models.hdit import HDiT_models
+from model.hdit import HDiT_models
 from loss import FMLoss
 
 from dataset import CustomDataset
-from diffusers.models import AutoencoderKL
+# from dataset import MockDataset
 
 import math
 from torchvision.utils import make_grid
@@ -142,6 +142,13 @@ def main(args):
 
     # Setup dataset:
     train_dataset = CustomDataset(args.data_dir_train)
+
+    # Returns random data for testing
+    # train_dataset = MockDataset(
+    #     num_samples=1000,  # Adjust as needed for testing
+    #     image_shape=(3, args.resolution, args.resolution),
+    #     num_classes=args.num_classes + 1,  # +1 for class-free guidance
+    # )
 
     num_images = len(train_dataset)
     local_batch_size = int(args.batch_size)
@@ -265,10 +272,12 @@ def main(args):
 
             x = images.squeeze(dim=1).to(device)
             y = y.to(device)
-            labels = y
+            drop_ids = torch.rand(y.shape[0], device=y.device) < args.cfg_prob  
+            labels = torch.where(drop_ids, args.num_classes, y)
+            model_kwargs = dict(y=labels)
 
             with accelerator.accumulate(model):
-                gen_loss = loss_fn(model, x, ema, labels)
+                gen_loss = loss_fn(model, x, model_kwargs)
                 loss = gen_loss.mean()
 
                 ## optimization
@@ -333,7 +342,7 @@ def parse_args(input_args=None):
     parser.add_argument("--epochs", type=int, default=801)
     parser.add_argument("--checkpoint-steps", type=int, default=50000)
     parser.add_argument("--checkpoint-epochs", type=int, default=200)
-    parser.add_argument("--max-train-steps", type=int, default=4100000)
+    parser.add_argument("--max-train-steps", type=int, default=400000)
 
     # model
     parser.add_argument("--model", type=str)
@@ -367,10 +376,9 @@ def parse_args(input_args=None):
     parser.add_argument("--num-workers", type=int, default=8)
 
     # loss
-    parser.add_argument("--loss-type", type=str, default="sml1", choices=["sml1", "l2", "l1"])
-    parser.add_argument("--cfg-prob", type=float, default=0.1, help="use class-free guidance if > 0")
     parser.add_argument("--path-type", type=str, default="linear", choices=["linear", "cosine"])
-    parser.add_argument("--prediction", type=str, default="v", choices=["v"])  # currently we only support v-prediction
+    parser.add_argument("--prediction", type=str, default="v", choices=["v"]) # currently we only support v-prediction
+    parser.add_argument("--cfg-prob", type=float, default=0.1, help="use class-free guidance if > 0")
     parser.add_argument("--weighting", default="uniform", type=str, help="Max gradient norm.")
 
 
