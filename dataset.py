@@ -58,6 +58,17 @@ class CustomDataset(Dataset):
             else:
                 image = np.array(PIL.Image.open(f))
                 image = image.reshape(*image.shape[:2], -1).transpose(2, 0, 1)
+        # Normalize to [-1, 1] and ensure float32 dtype
+        # Heuristics:
+        # - Integer or values outside [0, 1] -> assume [0, 255] and scale
+        # - Values in [0, 1] -> map to [-1, 1]
+        # - Values already in [-1, 1] -> just cast to float32
+        if np.issubdtype(image.dtype, np.integer) or image.max() > 1.0 or image.min() < 0.0:
+            image = image.astype(np.float32) / 127.5 - 1.0
+        elif image.min() >= 0.0 and image.max() <= 1.0:
+            image = image.astype(np.float32) * 2.0 - 1.0
+        else:
+            image = image.astype(np.float32)
 
         return torch.from_numpy(image), torch.tensor(self.labels[idx])
 
