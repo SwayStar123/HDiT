@@ -202,13 +202,11 @@ if __name__ == '__main__':
     print(f"Model created. Params: {sum(p.numel() for p in model.parameters()) / 1e6:.2f}M")
 
     B, C, H, W = 4, 3, 256, 256
-    C_l, H_l, W_l = 32, 4, 4
     x = torch.randn(B, C, H, W).to(device)
     t = torch.rand((B,)).to(device)
     y = torch.randint(0, 1000, (B,)).to(device)
-    l = torch.randn(B, C_l, H_l, W_l).to(device) # Latent conditioning map
 
-    output = model(x, t, y, l)
+    output = model(x, t, y)
     print(f"Input shape:  {x.shape}")
     print(f"Output shape: {output.shape}")
     assert output.shape == x.shape, "Output shape must match input shape!"

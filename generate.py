@@ -13,8 +13,7 @@ import os
 import torch
 import torch.distributed as dist
 from datetime import timedelta
-from models.sit import SiT_models
-from diffusers.models import AutoencoderKL
+from model.hdit import HDiT_models
 from tqdm import tqdm
 
 from PIL import Image
@@ -22,9 +21,6 @@ import numpy as np
 import math
 import argparse
 from samplers import euler_sampler, euler_maruyama_sampler
-
-
-
 
 
 def main(args):
@@ -46,7 +42,7 @@ def main(args):
     # Load model:
     block_kwargs = {"fused_attn": args.fused_attn, "qk_norm": args.qk_norm}
     latent_size = args.resolution // 8
-    model = SiT_models[args.model](
+    model = HDiT_models[args.model](
         input_size=latent_size,
         num_classes=args.num_classes,
         use_cfg= args.cfg_scale > 1.0,
@@ -68,8 +64,7 @@ def main(args):
     model.load_state_dict(state_dict)
     print(f"{rank} loaded model from {ckpt_path}")
     model.eval()  # important for classifer-free guidance.
-    vae = AutoencoderKL.from_pretrained(f"stabilityai/sd-vae-ft-{args.vae}").to(device)
-    assert args.cfg_scale >= 1.0, "In almost all cases, cfg_scale be >= 1.0， if cfg_scale =1.0, it means no cfg"
+    assert args.cfg_scale >= 1.0, "In almost all cases, cfg_scale be >= 1.0, if cfg_scale =1.0, it means no cfg"
     using_cfg = args.cfg_scale > 1.0
     if rank == 0:
         print("Using cfg:", using_cfg)
@@ -131,14 +126,7 @@ def main(args):
                 samples = euler_sampler(**sampling_kwargs).to(torch.float32)
             else:
                 raise NotImplementedError()
-
-            latents_scale = torch.tensor(
-                [0.18215, 0.18215, 0.18215, 0.18215, ]
-                ).view(1, 4, 1, 1).to(device)
-            latents_bias = -torch.tensor(
-                [0., 0., 0., 0.,]
-                ).view(1, 4, 1, 1).to(device)
-            samples = vae.decode((samples - latents_bias) / latents_scale).sample
+            
             samples = (samples + 1) / 2.
             samples = torch.clamp(
                 255. * samples, 0, 255
@@ -172,7 +160,7 @@ if __name__ == "__main__":
     parser.add_argument("--sample-dir", type=str, default="samples")
 
     # model
-    parser.add_argument("--model", type=str, choices=list(SiT_models.keys()), default="SiT-B/2")
+    parser.add_argument("--model", type=str, choices=list(HDiT_models.keys()), default="HDiT-B/2")
     parser.add_argument("--num-classes", type=int, default=1000)
     parser.add_argument("--resolution", type=int, choices=[256, 512], default=256)
     parser.add_argument("--fused-attn", action=argparse.BooleanOptionalAction, default=False)

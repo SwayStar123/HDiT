@@ -141,10 +141,6 @@ class Attention(nn.Module):
         self.attention_type = attention_type
         self.kernel_size = kernel_size
 
-        if attention_type == "neighborhood":
-            if natten is None:
-                raise ImportError("`natten` is required. Please run `pip install natten`.")
-
         self.norm = AdaRMSNorm(hidden_size, cond_size)
         self.qkv_proj = nn.Linear(hidden_size, hidden_size * 3)
         self.pos_emb = AxialRoPE(self.dim_head)

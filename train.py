@@ -220,7 +220,7 @@ def main(args):
                 accelerator.wait_for_everyone()
                 if accelerator.is_main_process:
                     checkpoint = {
-                        "model": model.module.state_dict(),
+                        "model": accelerator.unwrap_model(model).state_dict(),
                         "ema": ema.state_dict(),
                         "opt": optimizer.state_dict(),
                         "args": args,
@@ -307,7 +307,7 @@ def main(args):
         if (epoch+1) % args.checkpoint_epochs == 0:
             if accelerator.is_main_process:
                 checkpoint = {
-                    "model": model.module.state_dict(),
+                    "model": accelerator.unwrap_model(model).state_dict(),
                     "ema": ema.state_dict(),
                     "opt": optimizer.state_dict(),
                     "args": args,

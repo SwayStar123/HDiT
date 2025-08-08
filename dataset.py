@@ -43,9 +43,7 @@ class CustomDataset(Dataset):
         return os.path.splitext(fname)[1].lower()
 
     def __len__(self):
-        assert len(self.image_fnames) == len(self.feature_fnames), \
-            "Number of feature files and label files should be same"
-        return len(self.feature_fnames)
+        return len(self.image_fnames)
 
     def __getitem__(self, idx):
         image_fname = self.image_fnames[idx]
