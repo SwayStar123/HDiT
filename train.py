@@ -29,6 +29,7 @@ from dataset import CustomDataset
 import math
 from torchvision.utils import make_grid
 from PIL import Image
+import wandb
 
 logger = get_logger(__name__)
 
@@ -109,6 +110,7 @@ def main(args):
         gradient_accumulation_steps=args.gradient_accumulation_steps,
         mixed_precision=args.mixed_precision,
         project_config=accelerator_project_config,
+        log_with="wandb"
     )
 
     if accelerator.is_main_process:
@@ -124,6 +126,10 @@ def main(args):
         os.makedirs(checkpoint_dir, exist_ok=True)
         logger = create_logger(save_dir)
         logger.info(f"Experiment directory created at {save_dir}")
+
+        sample_dir = os.path.join(save_dir, "samples")
+        os.makedirs(sample_dir, exist_ok=True)
+    
     device = accelerator.device
     if torch.backends.mps.is_available():
         accelerator.native_amp = False
@@ -238,10 +244,7 @@ def main(args):
     n = gt_ys.size(0)
     xT = torch.randn((n, channels, resolution, resolution), device=device)
     
-    base_dir = os.path.join(args.output_dir, args.exp_name)
-    sample_dir = os.path.join(base_dir, "samples")
-    os.makedirs(sample_dir, exist_ok=True)
-    
+
     if args.use_latents:
         gt_xs = sample_posterior(
             gt_xs.to(device), latents_scale=latents_scale, latents_bias=latents_bias
@@ -251,7 +254,9 @@ def main(args):
         gt_samples = accelerator.gather(gt_samples.to(torch.float32))
         gt_samples = Image.fromarray(array2grid(gt_samples))
         gt_samples.save(f"{sample_dir}/gt_samples_step.png")
-
+        accelerator.log({
+            "gt_samples": wandb.Image(gt_samples),
+        }, step=0)
 
     for epoch in range(epoch_start+1, args.epochs):
         model.train()
@@ -304,6 +309,11 @@ def main(args):
                 if accelerator.is_main_process:
                     out_samples.save(f"{sample_dir}/samples_step_{global_step}.png")
                     logger.info(f"Saved samples at step {global_step}")
+
+                    if global_step % (args.sample_steps*10)== 0:
+                        accelerator.log({
+                            "samples": wandb.Image(out_samples),
+                        }, step=global_step)
                 model.train()
 
             x = x.to(device)
@@ -376,7 +386,7 @@ def parse_args(input_args=None):
     parser.add_argument("--exp-name", type=str, required=True)
     parser.add_argument("--logging-dir", type=str, default="logs")
     parser.add_argument("--resume-ckpt", type=str, default=None)
-    parser.add_argument("--sample-steps", type=int, default=100000)
+    parser.add_argument("--sample-steps", type=int, default=2000)
     parser.add_argument("--epochs", type=int, default=801)
     parser.add_argument("--checkpoint-steps", type=int, default=50000)
     parser.add_argument("--checkpoint-epochs", type=int, default=200)
