@@ -134,6 +134,7 @@ def main(args):
     model = HDiT_models[args.model](
         num_classes=args.num_classes,
         in_channels=channels,
+        attention_kernel_size=3 if args.use_latents else 7
     )
 
     divisible_requirement = ((((model.num_levels-1)**2) * model.patch_size) * (8 if args.use_latents else 1))
