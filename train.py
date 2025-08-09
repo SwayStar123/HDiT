@@ -9,6 +9,7 @@ torch.backends.cudnn.allow_tf32 = True
 from pathlib import Path
 from collections import OrderedDict
 import json
+from diffusers.models import AutoencoderKL
 
 import torch.utils.checkpoint
 from tqdm.auto import tqdm
@@ -31,6 +32,15 @@ from PIL import Image
 
 logger = get_logger(__name__)
 
+def preprocess_raw_image(x):
+    x = x / 255.
+    x = (x * 2) - 1
+    return x
+
+def get_raw_image(x):
+    x = (x + 1) / 2
+    x = x * 255.
+    return x
 
 def array2grid(x):
     nrow = round(math.sqrt(x.size(0)))
@@ -38,6 +48,12 @@ def array2grid(x):
     x = x.mul(255).add_(0.5).clamp_(0, 255).permute(1, 2, 0).to('cpu', torch.uint8).numpy()
     return x
 
+@torch.no_grad()
+def sample_posterior(moments, latents_scale=1., latents_bias=0.):
+    mean, std = torch.chunk(moments, 2, dim=1)
+    z = mean + std * torch.randn_like(mean)
+    z = (z * latents_scale + latents_bias) 
+    return z 
 
 @torch.no_grad()
 def update_ema(ema_model, model, decay=0.9999):
@@ -80,6 +96,9 @@ def requires_grad(model, flag=True):
 #################################################################################
 
 def main(args):
+    channels = 4 if args.use_latents else 3
+    resolution = args.resolution // 8 if args.use_latents else args.resolution
+
     # set accelerator
     logging_dir = Path(args.output_dir, args.logging_dir)
     accelerator_project_config = ProjectConfiguration(
@@ -112,15 +131,22 @@ def main(args):
         set_seed(args.seed + accelerator.process_index)
 
     # Create model:
-    assert args.resolution % 64 == 0, "Image size must be divisible by 64 (because of downsampling in HDiT)."
-
     model = HDiT_models[args.model](
         num_classes=args.num_classes,
-        latent_channels=args.latent_channels,
+        in_channels=channels,
     )
+
+    divisible_requirement = ((((model.num_levels-1)**2) * model.patch_size) * (8 if args.use_latents else 1))
+    assert args.resolution % divisible_requirement == 0, f"Image size must be divisible by {divisible_requirement} (because of downsampling in HDiT)."
 
     model = model.to(device)
     ema = deepcopy(model).to(device)
+
+    if args.use_latents:
+        vae = AutoencoderKL.from_pretrained(f"stabilityai/sd-vae-ft-mse").to(device)
+
+        latents_scale = torch.tensor([0.18215, 0.18215, 0.18215, 0.18215]).view(1, 4, 1, 1).to(device)
+        latents_bias = torch.tensor([0., 0., 0., 0.]).view(1, 4, 1, 1).to(device)
 
     # create loss function
     loss_fn = FMLoss(
@@ -141,12 +167,12 @@ def main(args):
     )
 
     # Setup dataset:
-    train_dataset = CustomDataset(args.data_dir_train)
+    train_dataset = CustomDataset(args.data_dir_train, args.use_latents)
 
     # Returns random data for testing
     # train_dataset = MockDataset(
     #     num_samples=1000,  # Adjust as needed for testing
-    #     image_shape=(3, args.resolution, args.resolution),
+    #     image_shape=(channels * 2 if args.use_latents else channels, resolution, resolution),
     #     num_classes=args.num_classes + 1,  # +1 for class-free guidance
     # )
 
@@ -209,12 +235,26 @@ def main(args):
     gt_ys = gt_ys[:sample_batch_size].to(device)
     # Create sampling noise:
     n = gt_ys.size(0)
-    xT = torch.randn((n, 3, args.resolution, args.resolution), device=device)
+    xT = torch.randn((n, channels, resolution, resolution), device=device)
+    
+    base_dir = os.path.join(args.output_dir, args.exp_name)
+    sample_dir = os.path.join(base_dir, "samples")
+    os.makedirs(sample_dir, exist_ok=True)
+    
+    if args.use_latents:
+        gt_xs = sample_posterior(
+            gt_xs.to(device), latents_scale=latents_scale, latents_bias=latents_bias
+        )
+        gt_samples = vae.decode((gt_xs - latents_bias) / latents_scale).sample
+        gt_samples = (gt_xs + 1) / 2.
+        gt_samples = accelerator.gather(gt_samples.to(torch.float32))
+        gt_samples = Image.fromarray(array2grid(gt_samples))
+        gt_samples.save(f"{sample_dir}/gt_samples_step.png")
+
 
     for epoch in range(epoch_start+1, args.epochs):
-
         model.train()
-        for images, y in train_dataloader:
+        for x, y in train_dataloader:
             # save checkpoint (feel free to adjust the frequency)
             if (global_step % args.checkpoint_steps == 0) and global_step > 0:
                 accelerator.wait_for_everyone()
@@ -249,28 +289,25 @@ def main(args):
                         heun=False,
                     ).to(torch.float32)
 
+                    if args.use_latents:
+                        samples = vae.decode((samples -  latents_bias) / latents_scale).sample
                     samples = (samples + 1) / 2.
-                    gt_samples = (gt_xs + 1) / 2.
-
+                    
                 # Save images locally
                 accelerator.wait_for_everyone()
                 out_samples = accelerator.gather(samples.to(torch.float32))
-                gt_samples = accelerator.gather(gt_samples.to(torch.float32))
-
+                
                 # Save as grid images
                 out_samples = Image.fromarray(array2grid(out_samples))
-                gt_samples = Image.fromarray(array2grid(gt_samples))
 
                 if accelerator.is_main_process:
-                    base_dir = os.path.join(args.output_dir, args.exp_name)
-                    sample_dir = os.path.join(base_dir, "samples")
-                    os.makedirs(sample_dir, exist_ok=True)
                     out_samples.save(f"{sample_dir}/samples_step_{global_step}.png")
-                    gt_samples.save(f"{sample_dir}/gt_samples_step_{global_step}.png")
                     logger.info(f"Saved samples at step {global_step}")
                 model.train()
 
-            x = images.squeeze(dim=1).to(device)
+            x = x.to(device)
+            if args.use_latents:
+                x = sample_posterior(x, latents_scale=latents_scale, latents_bias=latents_bias)
             y = y.to(device)
             drop_ids = torch.rand(y.shape[0], device=y.device) < args.cfg_prob  
             labels = torch.where(drop_ids, args.num_classes, y)
@@ -354,8 +391,7 @@ def parse_args(input_args=None):
     parser.add_argument("--data-dir-train", type=str, default="../data/imagenet256")
     parser.add_argument("--resolution", type=int, choices=[256, 512], default=256)
     parser.add_argument("--batch-size", type=int, default=256)
-    # Channel size of the conditioning latent tokens, not the image channels.
-    parser.add_argument("--latent-channels", type=int, default=32)
+    parser.add_argument("--use-latents", type=bool, default=False)
 
     # precision
     parser.add_argument("--mixed-precision", type=str, default="fp16", choices=["no", "fp16", "bf16"])

@@ -27,7 +27,6 @@ class HDiT(nn.Module):
     def __init__(
         self,
         in_channels=3,
-        latent_channels=32,
         patch_size=2,
         num_classes=1000,
         level_widths: List[int]       = [256, 512, 1024],
@@ -40,13 +39,12 @@ class HDiT(nn.Module):
         super().__init__()
         self.in_channels = in_channels
         self.patch_size = patch_size
-        num_levels = len(level_widths)
+        self.num_levels = len(level_widths)
         depth_per_level, depth_bottleneck = level_depths
 
         # --- Input and Conditioning ---
         self.patch_embed = TokenMerge(in_channels, level_widths[0], patch_size)
         bottleneck_width = level_widths[-1]
-        self.latent_proj = nn.Linear(latent_channels, bottleneck_width)
 
         map_width = bottleneck_width # Use the widest dimension for mapping network
         self.t_embedder = TimestepEmbedder(map_width)
@@ -61,7 +59,7 @@ class HDiT(nn.Module):
         self.merges, self.splits = nn.ModuleList(), nn.ModuleList()
 
         # Build the downsampling and upsampling levels
-        for i in range(num_levels - 1):
+        for i in range(self.num_levels - 1):
             width, next_width = level_widths[i], level_widths[i+1]
             assert width % head_dim == 0, f"Width {width} at level {i} must be divisible by head_dim {head_dim}"
             num_heads = width // head_dim

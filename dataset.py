@@ -14,24 +14,39 @@ except ImportError:
 
 
 class CustomDataset(Dataset):
-    def __init__(self, data_dir,num_classes=1000):
+    def __init__(self, data_dir, load_latents: bool = False):
         PIL.Image.init()
         supported_ext = PIL.Image.EXTENSION.keys() | {'.npy'}
 
-        self.num_classes = num_classes
-        self.images_dir = os.path.join(data_dir, 'images')
+        self.load_latents = load_latents
 
-        # images
-        self._image_fnames = {
-            os.path.relpath(os.path.join(root, fname), start=self.images_dir)
-            for root, _dirs, files in os.walk(self.images_dir) for fname in files
+        if self.load_latents:
+            self.features_dir = os.path.join(data_dir, 'vae-sd')
+        else:
+            self.images_dir = os.path.join(data_dir, 'images')
+
+        if self.load_latents:
+            # features
+            self._feature_fnames = {
+                os.path.relpath(os.path.join(root, fname), start=self.features_dir)
+                for root, _dirs, files in os.walk(self.features_dir) for fname in files
             }
-        self.image_fnames = sorted(
-            fname for fname in self._image_fnames if self._file_ext(fname) in supported_ext
+            self.feature_fnames = sorted(
+                fname for fname in self._feature_fnames if self._file_ext(fname) in supported_ext
             )
+        else:
+            # images
+            self._image_fnames = {
+                os.path.relpath(os.path.join(root, fname), start=self.images_dir)
+                for root, _dirs, files in os.walk(self.images_dir) for fname in files
+            }
+            self.image_fnames = sorted(
+                fname for fname in self._image_fnames if self._file_ext(fname) in supported_ext
+            )
+        
         # labels
         fname = 'dataset.json'
-        with open(os.path.join(self.images_dir, fname), 'rb') as f:
+        with open(os.path.join(self.latents_dir if self.load_latents else self.images_dir, fname), 'rb') as f:
             labels = json.load(f)['labels']
         labels = dict(labels)
         labels = [labels[fname.replace('\\', '/')] for fname in self.image_fnames]
@@ -46,32 +61,25 @@ class CustomDataset(Dataset):
         return len(self.image_fnames)
 
     def __getitem__(self, idx):
-        image_fname = self.image_fnames[idx]
-        image_ext = self._file_ext(image_fname)
-        with open(os.path.join(self.images_dir, image_fname), 'rb') as f:
-            if image_ext == '.npy':
-                image = np.load(f)
-                image = image.reshape(-1, *image.shape[-2:])
-            elif image_ext == '.png' and pyspng is not None:
-                image = pyspng.load(f.read())
-                image = image.reshape(*image.shape[:2], -1).transpose(2, 0, 1)
-            else:
-                image = np.array(PIL.Image.open(f))
-                image = image.reshape(*image.shape[:2], -1).transpose(2, 0, 1)
-        # Normalize to [-1, 1] and ensure float32 dtype
-        # Heuristics:
-        # - Integer or values outside [0, 1] -> assume [0, 255] and scale
-        # - Values in [0, 1] -> map to [-1, 1]
-        # - Values already in [-1, 1] -> just cast to float32
-        if np.issubdtype(image.dtype, np.integer) or image.max() > 1.0 or image.min() < 0.0:
-            image = image.astype(np.float32) / 127.5 - 1.0
-        elif image.min() >= 0.0 and image.max() <= 1.0:
-            image = image.astype(np.float32) * 2.0 - 1.0
+        if self.load_latents:
+            feature_fname = self.feature_fnames[idx]
+            features = np.load(os.path.join(self.features_dir, feature_fname))
+
+            return torch.from_numpy(features), torch.tensor(self.labels[idx])
         else:
-            image = image.astype(np.float32)
-
-        return torch.from_numpy(image), torch.tensor(self.labels[idx])
-
+            image_fname = self.image_fnames[idx]
+            image_ext = self._file_ext(image_fname)
+            with open(os.path.join(self.images_dir, image_fname), 'rb') as f:
+                if image_ext == '.npy':
+                    image = np.load(f)
+                    image = image.reshape(-1, *image.shape[-2:])
+                elif image_ext == '.png' and pyspng is not None:
+                    image = pyspng.load(f.read())
+                    image = image.reshape(*image.shape[:2], -1).transpose(2, 0, 1)
+                else:
+                    image = np.array(PIL.Image.open(f))
+                    image = image.reshape(*image.shape[:2], -1).transpose(2, 0, 1)
+            return torch.from_numpy(image),  torch.tensor(self.labels[idx])
 
 class MockDataset(Dataset):
     def __init__(self, num_samples=100, image_shape=(3, 256, 256), num_classes=1000):
