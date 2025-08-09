@@ -46,10 +46,13 @@ class CustomDataset(Dataset):
         
         # labels
         fname = 'dataset.json'
-        with open(os.path.join(self.latents_dir if self.load_latents else self.images_dir, fname), 'rb') as f:
+        with open(os.path.join(self.features_dir if self.load_latents else self.images_dir, fname), 'rb') as f:
             labels = json.load(f)['labels']
         labels = dict(labels)
-        labels = [labels[fname.replace('\\', '/')] for fname in self.image_fnames]
+        if self.load_latents:
+            labels = [labels[fname.replace('\\', '/')] for fname in self.feature_fnames]
+        else:
+            labels = [labels[fname.replace('\\', '/')] for fname in self.image_fnames]
         labels = np.array(labels)
         self.labels = labels.astype({1: np.int64, 2: np.float32}[labels.ndim])
 
@@ -58,7 +61,7 @@ class CustomDataset(Dataset):
         return os.path.splitext(fname)[1].lower()
 
     def __len__(self):
-        return len(self.image_fnames)
+        return len(self.feature_fnames) if self.load_latents else len(self.image_fnames)
 
     def __getitem__(self, idx):
         if self.load_latents:

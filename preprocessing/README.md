@@ -9,14 +9,14 @@ After downloading [ImageNet](https://www.kaggle.com/competitions/imagenet-object
 
 ```bash
 # Convert raw ImageNet data to a ZIP archive at 256x256 resolution
-python dataset_tools.py convert --source=[YOUR_DOWNLOAD_PATH]/ILSVRC/Data/CLS-LOC/train \
-    --dest=[TARGET_PATH]/images --resolution=256x256 --transform=center-crop-dhariwal
+python preprocessing/dataset_tools.py convert --source=data/ILSVRC/Data/CLS-LOC/train \
+    --dest=dataset/images --resolution=256x256 --transform=center-crop-dhariwal
 ```
 
 ```bash
 # Convert the pixel data to VAE latents
-python dataset_tools.py encode --source=[TARGET_PATH]/images \
-    --dest=[TARGET_PATH]/latents
+python preprocessing/dataset_tools.py encode --source=dataset/images \
+    --dest=dataset/vae-sd
 ```
 
 Here,`YOUR_DOWNLOAD_PATH` is the directory that you downloaded the dataset, and `TARGET_PATH` is the directory that you will save the preprocessed images and corresponding compressed latent vectors. This directory will be used for your experiment scripts.\

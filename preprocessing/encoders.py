@@ -32,13 +32,6 @@ warnings.filterwarnings('ignore', '`resume_download` is deprecated')
 # All image data is represented as PyTorch tensors in NCHW order.
 # Raw pixels are represented as 3-channel uint8.
 
-@torch.no_grad()
-def sample_posterior(mean, std):
-    z = mean + std * torch.randn_like(mean)
-
-    return z
-
-
 @persistence.persistent_class
 class Encoder:
     def __init__(self):
@@ -78,7 +71,7 @@ class StabilityVAEEncoder(Encoder):
 
     def _run_vae_encoder(self, x):
         d = self._vae.encode(x)['latent_dist']
-        return sample_posterior(d.mean, d.std)
+        return torch.cat([d.mean, d.std], dim=1)
 
     def encode_pixels(self, x): # raw pixels => raw latents
         self.init(x.device)
@@ -99,54 +92,6 @@ def load_stability_vae(vae_name='stabilityai/sd-vae-ft-mse', device=torch.device
     except:
         # Could not load the model from cache; try without local_files_only.
         vae = diffusers.models.AutoencoderKL.from_pretrained(vae_name)
-    return vae.eval().requires_grad_(False).to(device)
-
-#----------------------------------------------------------------------------
-# Pre-trained AE encoder.
-
-@persistence.persistent_class
-class EncoderDC(Encoder):
-    def __init__(self,
-        ae_name    = 'mit-han-lab/dc-ae-f64c128-mix-1.0-diffusers',  # Name of the VAE to use.
-        batch_size  = 8,                            # Batch size to use when running the VAE.
-    ):
-        super().__init__()
-        self.ae_name = ae_name
-        self.batch_size = int(batch_size)
-        self._ae = None
-
-    def init(self, device): # force lazy init to happen now
-        super().init(device)
-        if self._ae is None:
-            self._ae = load_dcae(self.ae_name, device=device)
-        else:
-            self._ae.to(device)
-
-    def __getstate__(self):
-        return dict(super().__getstate__(), _ae=None) # do not pickle the vae
-
-    def _run_ae_encoder(self, x):
-        return self._ae.encode(x).latent
-
-    def encode_pixels(self, x): # raw pixels => raw latents
-        self.init(x.device)
-        x = x.to(torch.float32) / 127.5 - 1
-        x = torch.cat([self._run_ae_encoder(batch) for batch in x.split(self.batch_size)])
-        return x
-
-#----------------------------------------------------------------------------
-
-def load_dcae(ae_name='mit-han-lab/dc-ae-f64c128-mix-1.0-diffusers', device=torch.device('cpu')):
-
-    import diffusers # pip install diffusers # pyright: ignore [reportMissingImports]
-    try:
-        # First try with local_files_only to avoid consulting tfhub metadata if the model is already in cache.
-        vae = diffusers.models.AutoencoderDC.from_pretrained(
-            ae_name,  local_files_only=True
-            )
-    except:
-        # Could not load the model from cache; try without local_files_only.
-        vae = diffusers.models.AutoencoderDC.from_pretrained(ae_name)
     return vae.eval().requires_grad_(False).to(device)
 
 #----------------------------------------------------------------------------

@@ -250,7 +250,7 @@ def main(args):
             gt_xs.to(device), latents_scale=latents_scale, latents_bias=latents_bias
         )
         gt_samples = vae.decode((gt_xs - latents_bias) / latents_scale).sample
-        gt_samples = (gt_xs + 1) / 2.
+        gt_samples = (gt_samples + 1) / 2.
         gt_samples = accelerator.gather(gt_samples.to(torch.float32))
         gt_samples = Image.fromarray(array2grid(gt_samples))
         gt_samples.save(f"{sample_dir}/gt_samples_step.png")
@@ -399,7 +399,7 @@ def parse_args(input_args=None):
     parser.add_argument("--qk-norm", action=argparse.BooleanOptionalAction, default=False)
 
     # dataset
-    parser.add_argument("--data-dir-train", type=str, default="../data/imagenet256")
+    parser.add_argument("--data-dir-train", type=str, default="dataset")
     parser.add_argument("--resolution", type=int, choices=[256, 512], default=256)
     parser.add_argument("--batch-size", type=int, default=256)
     parser.add_argument("--use-latents", type=bool, default=False)
