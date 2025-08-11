@@ -1,3 +1,8 @@
 data
 dataset
+dataset.zip
+latent_dataset.zip
 exps
+__pycache__/
+model/__pycache__
+preprocessing/__pycache__

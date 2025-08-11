@@ -21,32 +21,51 @@ import numpy as np
 import math
 import argparse
 from samplers import euler_sampler, euler_maruyama_sampler
-
+from diffusers import AutoencoderKL
 
 def main(args):
-    """
-    Run sampling.
+    """Run sampling on either multiple GPUs with DDP or a single GPU without DDP.
+
+    Single-GPU mode is enabled by passing --no-ddp (or leaving --ddp but having only 1 visible GPU
+    and no torch.distributed launch context). All distributed barriers and world-size logic are
+    guarded so the script runs identically in both modes.
     """
     torch.backends.cuda.matmul.allow_tf32 = args.tf32  # True: fast but may lead to some small numerical differences
-    assert torch.cuda.is_available(), "Sampling with DDP requires at least one GPU. sample.py supports CPU-only usage"
+    assert torch.cuda.is_available(), "At least one CUDA device is required."
     torch.set_grad_enabled(False)
-    # Setup DDP:cd
-    dist.init_process_group("nccl",timeout=timedelta(seconds=6000))
-    rank = dist.get_rank()
-    device = rank % torch.cuda.device_count()
-    seed = args.global_seed * dist.get_world_size() + rank
+
+    # Decide whether to use DDP
+    env_has_dist = ("RANK" in os.environ) or ("WORLD_SIZE" in os.environ)
+    # Only enable DDP if user requested it AND there is more than 1 GPU/process context
+    use_ddp = (
+        args.ddp
+        and torch.distributed.is_available()
+        and (torch.cuda.device_count() > 1 or (env_has_dist and int(os.environ.get("WORLD_SIZE", "1")) > 1))
+    )
+
+    if use_ddp:
+        # Initialize process group (idempotent if already initialized by torchrun)
+        if not dist.is_initialized():
+            dist.init_process_group("nccl", timeout=timedelta(seconds=6000))
+        rank = dist.get_rank()
+        world_size = dist.get_world_size()
+        device_index = rank % torch.cuda.device_count()
+    else:
+        rank = 0
+        world_size = 1
+        device_index = 0  # use the first (or only) GPU
+
+    device = torch.device(f"cuda:{device_index}")
+    seed = args.global_seed * world_size + rank
     torch.manual_seed(seed)
 
-    print(f"Starting rank={rank}, seed={seed}, world_size={dist.get_world_size()}.")
+    print(f"Starting rank={rank}, seed={seed}, world_size={world_size}, ddp={use_ddp}.")
 
-    # Load model:
-    block_kwargs = {"fused_attn": args.fused_attn, "qk_norm": args.qk_norm}
+
     latent_size = args.resolution // 8
     model = HDiT_models[args.model](
-        input_size=latent_size,
         num_classes=args.num_classes,
-        use_cfg= args.cfg_scale > 1.0,
-        **block_kwargs
+        in_channels=4,
     ).to(device)
 
 
@@ -57,13 +76,14 @@ def main(args):
         raise ValueError("ckpt_path is required!")
     else:
         try:
-            state_dict = torch.load(ckpt_path, map_location=f'cuda:{device}')['ema']
+            state_dict = torch.load(ckpt_path, map_location=f'{device}', weights_only=False)['ema']
         except:
-            state_dict = torch.load(ckpt_path, map_location=f'cuda:{device}')
+            state_dict = torch.load(ckpt_path, map_location=f'{device}', weights_only=False)
 
     model.load_state_dict(state_dict)
     print(f"{rank} loaded model from {ckpt_path}")
     model.eval()  # important for classifer-free guidance.
+    vae = AutoencoderKL.from_pretrained(f"stabilityai/sd-vae-ft-{args.vae}").to(device)
     assert args.cfg_scale >= 1.0, "In almost all cases, cfg_scale be >= 1.0, if cfg_scale =1.0, it means no cfg"
     using_cfg = args.cfg_scale > 1.0
     if rank == 0:
@@ -84,19 +104,20 @@ def main(args):
     if rank == 0:
         os.makedirs(sample_folder_dir, exist_ok=True)
         print(f"Saving .png samples at {sample_folder_dir}")
-    dist.barrier()
+    if use_ddp:
+        dist.barrier()
 
     # Figure out how many samples we need to generate on each GPU and how many iterations we need to run:
     n = args.per_proc_batch_size
-    global_batch_size = n * dist.get_world_size()
+    global_batch_size = n * world_size
     # To make things evenly-divisible, we'll sample a bit more than we need and then discard the extra samples:
     total_samples = int(math.ceil(args.num_fid_samples / global_batch_size) * global_batch_size)
     if rank == 0:
         print(f"Total number of images that will be sampled: {total_samples}")
         print(f"SiT Parameters: {sum(p.numel() for p in model.parameters()):,}")
 
-    assert total_samples % dist.get_world_size() == 0, "total_samples must be divisible by world_size"
-    samples_needed_this_gpu = int(total_samples // dist.get_world_size())
+    assert total_samples % world_size == 0, "total_samples must be divisible by world_size"
+    samples_needed_this_gpu = int(total_samples // world_size)
     assert samples_needed_this_gpu % n == 0, "samples_needed_this_gpu must be divisible by the per-GPU batch size"
     iterations = int(samples_needed_this_gpu // n)
     pbar = range(iterations)
@@ -127,6 +148,13 @@ def main(args):
             else:
                 raise NotImplementedError()
             
+            latents_scale = torch.tensor(
+                [0.18215, 0.18215, 0.18215, 0.18215, ]
+                ).view(1, 4, 1, 1).to(device)
+            latents_bias = -torch.tensor(
+                [0., 0., 0., 0.,]
+                ).view(1, 4, 1, 1).to(device)
+            samples = vae.decode((samples - latents_bias) / latents_scale).sample
             samples = (samples + 1) / 2.
             samples = torch.clamp(
                 255. * samples, 0, 255
@@ -134,13 +162,15 @@ def main(args):
 
             # Save samples to disk as individual .png files
             for i, sample in enumerate(samples):
-                index = i * dist.get_world_size() + rank + total
+                index = i * world_size + rank + total
                 Image.fromarray(sample).save(f"{sample_folder_dir}/{index:06d}.png")
         total += global_batch_size
-    dist.barrier()
+    if use_ddp:
+        dist.barrier()
     print(f"Rank={rank} finished")
-    dist.barrier()
-    dist.destroy_process_group()
+    if use_ddp:
+        dist.barrier()
+        dist.destroy_process_group()
 
 
 
@@ -182,6 +212,10 @@ if __name__ == "__main__":
     parser.add_argument("--heun", action=argparse.BooleanOptionalAction, default=False) # only for ode
     parser.add_argument("--guidance-low", type=float, default=0.)
     parser.add_argument("--guidance-high", type=float, default=1.)
+
+    # single / multi GPU toggle
+    parser.add_argument("--ddp", action=argparse.BooleanOptionalAction, default=True,
+                        help="Enable DistributedDataParallel. Use --no-ddp to force single-GPU execution without initializing torch.distributed.")
 
     # distributed
     parser.add_argument('--world_size', default=1, type=int,

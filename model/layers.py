@@ -110,29 +110,35 @@ class AxialRoPE(nn.Module):
 
         return torch.cat([theta_y, theta_x], dim=-1)
 
-def apply_rotary_pos_emb(q, k, theta):
-    """ Apply RoPE"""
+
+def _rope_apply(q, k, sin, cos):
+    """
+    q, k: (B, H, S, Dh)
+    sin, cos: (1, 1, S, rope_dim) where rope_dim = Dh // 2 (from AxialRoPE)
+    """
+    rope_dim = sin.shape[-1]  # safer than passing an int
+    q_rope, q_pass = q[..., :rope_dim], q[..., rope_dim:]
+    k_rope, k_pass = k[..., :rope_dim], k[..., rope_dim:]
+
     def rotate_half(x):
         x1, x2 = x.chunk(2, dim=-1)
         return torch.cat([-x2, x1], dim=-1)
 
-    # The part of the head dimension that will be rotated
-    rope_dim = theta.shape[-1]
-    q_rope, q_pass = q[..., :rope_dim], q[..., rope_dim:]
-    k_rope, k_pass = k[..., :rope_dim], k[..., rope_dim:]
+    q_rot = q_rope * cos + rotate_half(q_rope) * sin
+    k_rot = k_rope * cos + rotate_half(k_rope) * sin
 
-    sin, cos = theta.sin(), theta.cos()
-    q_rotated = (q_rope * cos) + (rotate_half(q_rope) * sin)
-    k_rotated = (k_rope * cos) + (rotate_half(k_rope) * sin)
-
-    return torch.cat([q_rotated, q_pass], dim=-1), torch.cat([k_rotated, k_pass], dim=-1)
+    q_out = torch.cat([q_rot, q_pass], dim=-1)
+    k_out = torch.cat([k_rot, k_pass], dim=-1)
+    return q_out, k_out
 
 class Attention(nn.Module):
     """
-    The core Attention block, supporting both global (with optional latent conditioning)
-    and neighborhood attention.
+    The core Attention block, supporting both global and neighborhood attention.
+    RoPE is now precomputed per (H,W) once and cached.
     """
-    def __init__(self, hidden_size, num_heads, cond_size, attention_type="global", kernel_size=7):
+    def __init__(self, hidden_size, num_heads, cond_size,
+                 attention_type="global", kernel_size=7,
+                 static_hw=None):  # NEW: static (H, W) to precompute RoPE at init
         super().__init__()
         assert hidden_size % num_heads == 0, "hidden_size must be divisible by num_heads"
         self.hidden_size = hidden_size
@@ -149,18 +155,57 @@ class Attention(nn.Module):
         nn.init.zeros_(self.out_proj.weight)
         nn.init.zeros_(self.out_proj.bias)
 
+        # Buffers for cached RoPE trig. Start empty; fill on first use or at init if static_hw given.
+        self.register_buffer("rope_sin", torch.empty(0), persistent=True)
+        self.register_buffer("rope_cos", torch.empty(0), persistent=True)
+        self.rope_dim = self.dim_head // 2  # because AxialRoPE returns Dh/2
+        assert self.dim_head % 4 == 0, "Head dimension must be divisible by 4 for 2D RoPE."
+
+        self._static_hw = static_hw  # e.g. (H, W) or None
+
+    def _maybe_build_rope(self, H, W, device):
+        """
+        Build (or rebuild) RoPE sin/cos cache for current (H,W,device) if needed.
+        Stored as float32; cast to x.dtype at use-time.
+        Shapes: (1, 1, H*W, rope_dim)
+        """
+        need_rebuild = (
+            self.rope_sin.numel() == 0
+            or self.rope_sin.device != device
+            or self.rope_sin.shape[2] != H * W
+        )
+        if not need_rebuild:
+            return
+        theta_img = self.pos_emb(H, W, device)  # (H*W, rope_dim)
+        theta = theta_img.unsqueeze(0).unsqueeze(0)  # (1,1,S,rope_dim)
+        self.rope_sin = theta.sin()  # float32 buffer
+        self.rope_cos = theta.cos()
+
+    def _ensure_rope(self, H, W, device):
+        # If the module was constructed with a static size, trust it but still respect device.
+        if self._static_hw is not None:
+            Hs, Ws = self._static_hw
+            assert (H, W) == (Hs, Ws), \
+                f"Attention expected static HW={(Hs,Ws)} but got {(H,W)} at runtime."
+        self._maybe_build_rope(H, W, device)
+
     def forward(self, x, c):
         B, H, W, C = x.shape
         x_skip = x
+
         x_norm = self.norm(x, c)
         qkv = self.qkv_proj(x_norm)
-        q, k, v = rearrange(qkv, 'b h w (qkv heads d) -> qkv b heads (h w) d', qkv=3, heads=self.num_heads)
+        q, k, v = rearrange(qkv, 'b h w (qkv heads d) -> qkv b heads (h w) d',
+                            qkv=3, heads=self.num_heads, d=self.dim_head)
 
-        theta_img = self.pos_emb(H, W, x.device)
-        theta = theta_img.unsqueeze(0).unsqueeze(0)
-        q, k = apply_rotary_pos_emb(q, k, theta)
-        q = q.to(dtype=x.dtype)
-        k = k.to(dtype=x.dtype)
+        # Precompute / reuse RoPE for this spatial size
+        self._ensure_rope(H, W, x.device)
+        # Cast cached trig to current dtype (bf16/fp16 safe), keep shape/device
+        sin = self.rope_sin.to(dtype=x.dtype)
+        cos = self.rope_cos.to(dtype=x.dtype)
+
+        # Apply RoPE
+        q, k = _rope_apply(q, k, sin, cos)
 
         if self.attention_type == "neighborhood":
             q, k, v = map(lambda t: rearrange(t, 'b heads (h w) d -> b h w heads d', h=H, w=W), (q, k, v))
@@ -169,8 +214,6 @@ class Attention(nn.Module):
         else:
             out = F.scaled_dot_product_attention(q, k, v)
 
-        # Reshape and project output
         out = rearrange(out, 'b heads (h w) d -> b h w (heads d)', h=H, w=W)
         out = self.out_proj(out)
-
         return out + x_skip
