@@ -7,7 +7,7 @@ install natten  with
 
 
 
-XL/2 with latent space with BS 32 (single gpu)
+XL/2 with latent space with BS 32 (single gpu) for 350k train steps
 
 Inception Score: 19.498905181884766
 FID: 64.62433915263483
@@ -15,7 +15,7 @@ sFID: 9.93260851526577
 Precision: 0.42144
 Recall: 0.4954
 
-DiTXL baseline 19.5
-SiTXL baseline: 17.2
+DiTXL baseline 19.5 (400k steps)
+SiTXL baseline: 17.2 (400k steps)
 
 considering the 8x smaller batchsize i think we can say this is roughly equivalent to baseline whilst being cheaper
