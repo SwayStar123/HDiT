@@ -14,8 +14,3 @@ FID: 64.62433915263483
 sFID: 9.93260851526577
 Precision: 0.42144
 Recall: 0.4954
-
-DiTXL baseline 19.5 (400k steps)
-SiTXL baseline: 17.2 (400k steps)
-
-considering the 8x smaller batchsize i think we can say this is roughly equivalent to baseline whilst being cheaper
